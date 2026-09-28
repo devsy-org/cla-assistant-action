@@ -2,6 +2,7 @@ import { octokit } from '../octokit'
 import { context } from '@actions/github'
 import { CommitterMap, CommittersDetails, ReactedCommitterMap } from '../interfaces'
 import { getUseDcoFlag, getCustomPrSignComment } from '../shared/getInputs'
+import { isPrSignComment } from '../shared/isPrSignComment'
 
 import * as core from '@actions/core'
 
@@ -54,19 +55,19 @@ export default async function signatureWithPRComment(committerMap: CommitterMap,
 
 }
 
-function isCommentSignedByUser(comment: string, commentAuthor: string): boolean {
+export function isCommentSignedByUser(comment: string, commentAuthor: string): boolean {
     if (commentAuthor === 'github-actions[bot]') {
         return false
     }
     if (getCustomPrSignComment() !== "") {
-        return getCustomPrSignComment().toLowerCase() === comment
+        return isPrSignComment(comment)
     }
     // using a `string` true or false purposely as github action input cannot have a boolean value
     switch (getUseDcoFlag()) {
         case 'true':
             return comment.match(/^.*i \s*have \s*read \s*the \s*dco \s*document \s*and \s*i \s*hereby \s*sign \s*the \s*dco.*$/) !== null
         case 'false':
-            return comment.match(/^.*i \s*have \s*read \s*the \s*cla \s*document \s*and \s*i \s*hereby \s*sign \s*the \s*cla.*$/) !== null
+            return isPrSignComment(comment)
         default:
             return false
     }

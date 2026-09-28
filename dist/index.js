@@ -360,7 +360,7 @@ function updateFile(sha, claFileContent, reactedCommitters) {
                 ? input
                     .getSignedCommitMessage()
                     .replace('$contributorName', github_1.context.actor)
-                    // .replace('$pullRequestNo', pullRequestNo.toString())
+                    .replace('$pullRequestNo', pullRequestNo.toString())
                     .replace('$owner', owner)
                     .replace('$repo', repo)
                 : `@${github_1.context.actor} has signed the CLA in ${owner}/${repo}#${pullRequestNo}`,
@@ -825,9 +825,11 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.isCommentSignedByUser = void 0;
 const octokit_1 = __nccwpck_require__(3258);
 const github_1 = __nccwpck_require__(5438);
 const getInputs_1 = __nccwpck_require__(3611);
+const isPrSignComment_1 = __nccwpck_require__(8928);
 function signatureWithPRComment(committerMap, committers) {
     return __awaiter(this, void 0, void 0, function* () {
         let repoId = github_1.context.payload.repository.id;
@@ -879,18 +881,19 @@ function isCommentSignedByUser(comment, commentAuthor) {
         return false;
     }
     if ((0, getInputs_1.getCustomPrSignComment)() !== "") {
-        return (0, getInputs_1.getCustomPrSignComment)().toLowerCase() === comment;
+        return (0, isPrSignComment_1.isPrSignComment)(comment);
     }
     // using a `string` true or false purposely as github action input cannot have a boolean value
     switch ((0, getInputs_1.getUseDcoFlag)()) {
         case 'true':
             return comment.match(/^.*i \s*have \s*read \s*the \s*dco \s*document \s*and \s*i \s*hereby \s*sign \s*the \s*dco.*$/) !== null;
         case 'false':
-            return comment.match(/^.*i \s*have \s*read \s*the \s*cla \s*document \s*and \s*i \s*hereby \s*sign \s*the \s*cla.*$/) !== null;
+            return (0, isPrSignComment_1.isPrSignComment)(comment);
         default:
             return false;
     }
 }
+exports.isCommentSignedByUser = isCommentSignedByUser;
 
 
 /***/ }),
@@ -1096,6 +1099,35 @@ const lockPullRequestAfterMerge = () => core.getInput('lock-pullrequest-aftermer
 exports.lockPullRequestAfterMerge = lockPullRequestAfterMerge;
 const suggestRecheck = () => core.getInput('suggest-recheck', { required: false });
 exports.suggestRecheck = suggestRecheck;
+
+
+/***/ }),
+
+/***/ 8928:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.isPrSignComment = void 0;
+const getInputs_1 = __nccwpck_require__(3611);
+const pr_sign_comment_1 = __nccwpck_require__(6718);
+function isPrSignComment(comment) {
+    const customSignature = (0, getInputs_1.getCustomPrSignComment)();
+    const signature = (customSignature || (0, pr_sign_comment_1.getPrSignComment)()).trim().toLowerCase();
+    const signatureWithoutTerminalPeriod = signature.replace(/\.$/, '');
+    const normalizedComment = comment.trim().toLowerCase();
+    if (customSignature) {
+        return normalizedComment === signatureWithoutTerminalPeriod ||
+            normalizedComment === `${signatureWithoutTerminalPeriod}.`;
+    }
+    const normalizeWhitespace = (value) => value.replace(/\s+/g, ' ');
+    const normalizedSignature = normalizeWhitespace(signatureWithoutTerminalPeriod);
+    const normalizedCommentWithWhitespace = normalizeWhitespace(normalizedComment);
+    return normalizedCommentWithWhitespace === normalizedSignature ||
+        normalizedCommentWithWhitespace === `${normalizedSignature}.`;
+}
+exports.isPrSignComment = isPrSignComment;
 
 
 /***/ }),
