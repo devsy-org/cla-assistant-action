@@ -1,3 +1,14 @@
+export interface AuthorIdentity {
+    name: string
+    githubId: number
+    verified: boolean
+}
+
+export interface CommitAuthor {
+    authorIdentity: AuthorIdentity
+    commitSha: string
+}
+
 export interface CommitterMap {
     signed: CommittersDetails[],
     notSigned: CommittersDetails[],
