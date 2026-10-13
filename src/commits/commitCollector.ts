@@ -1,17 +1,7 @@
-/**
- * T2: Commit Collection with Full Pagination
- * 
- * Fetches all commits from a PR using paginated REST API.
- * GitHub REST API: max 250 commits per page.
- */
-
 import * as core from '@actions/core'
 import { CommitAuthor, AuthorIdentity } from '../interfaces'
 import { toCommitAuthor } from '../typed-author/authorIdentity'
 
-/**
- * GitHub REST API paginated commits endpoint
- */
 export interface PaginationOptions {
   owner: string
   repo: string
@@ -19,14 +9,6 @@ export interface PaginationOptions {
   octokit: any
 }
 
-/**
- * Fetch all commits from a PR with full pagination
- * 
- * - Uses REST API: /repos/{owner}/{repo}/pulls/{pull_number}/commits
- * - Max 250 per page
- * - Iterates until no more commits
- * - Returns typed CommitAuthor[] with verified identities
- */
 export async function fetchAllCommits(opts: PaginationOptions): Promise<CommitAuthor[]> {
   const { owner, repo, pull_number, octokit } = opts
   const allCommits: CommitAuthor[] = []
@@ -54,7 +36,6 @@ export async function fetchAllCommits(opts: PaginationOptions): Promise<CommitAu
 
       core.debug(`Page ${page} returned ${commits.length} commits`)
 
-      // Convert each commit to typed CommitAuthor
       for (const commit of commits) {
         try {
           const commitAuthor = toCommitAuthor(commit)
@@ -64,7 +45,6 @@ export async function fetchAllCommits(opts: PaginationOptions): Promise<CommitAu
         }
       }
 
-      // If we got fewer than per_page, we've reached the end
       if (commits.length < per_page) {
         core.debug(`Page ${page} returned fewer than ${per_page} commits, stopping`)
         break
@@ -72,7 +52,6 @@ export async function fetchAllCommits(opts: PaginationOptions): Promise<CommitAu
 
       page++
 
-      // Safety: stop if we've fetched more than 10000 commits (40 pages)
       if (page > 40) {
         core.error('Commit pagination exceeded 10000 commits, stopping to prevent runaway loop')
         break
@@ -86,9 +65,6 @@ export async function fetchAllCommits(opts: PaginationOptions): Promise<CommitAu
   }
 }
 
-/**
- * Extract unique verified author identities from commit list
- */
 export function extractVerifiedAuthors(commits: CommitAuthor[]): AuthorIdentity[] {
   const seen = new Set<number>()
   const verifiedAuthors: AuthorIdentity[] = []
@@ -96,7 +72,6 @@ export function extractVerifiedAuthors(commits: CommitAuthor[]): AuthorIdentity[
   for (const commit of commits) {
     const { githubId, verified } = commit.authorIdentity
     
-    // Only include verified identities with valid IDs
     if (verified && githubId > 0 && !seen.has(githubId)) {
       seen.add(githubId)
       verifiedAuthors.push(commit.authorIdentity)

@@ -1,23 +1,9 @@
-/**
- * T4: Signature Persistence - Durable Atomic Storage
- * 
- * Stores signatures atomically BEFORE success response.
- * Failure to persist blocks success (fail-closed).
- */
-
 import * as core from '@actions/core'
 
-/**
- * Storage provider interface
- * Implementation can be: filesystem, GitHub API, database, etc.
- */
 export interface SignatureStorage {
   persistSignature(userId: number, commitSha: string): Promise<void>
 }
 
-/**
- * In-memory signature store (for testing)
- */
 export class InMemorySignatureStore implements SignatureStorage {
   private signatures = new Map<string, Set<string>>()
 
@@ -40,10 +26,6 @@ export class InMemorySignatureStore implements SignatureStorage {
   }
 }
 
-/**
- * GitHub API signature store
- * Stores signatures via GitHub's file API (e.g., in a signatures branch)
- */
 export class GitHubSignatureStore implements SignatureStorage {
   constructor(
     private octokit: any,
@@ -59,7 +41,6 @@ export class GitHubSignatureStore implements SignatureStorage {
 
       core.debug(`[GitHub] Persisting signature to ${path}`)
 
-      // Check if file exists first
       let sha: string | undefined
       try {
         const existing = await this.octokit.rest.repos.getContent({
@@ -70,10 +51,8 @@ export class GitHubSignatureStore implements SignatureStorage {
         })
         sha = existing.data.sha
       } catch {
-        // File doesn't exist, we'll create it
       }
 
-      // Create or update file
       await this.octokit.rest.repos.createOrUpdateFileContents({
         owner: this.owner,
         repo: this.repo,
@@ -92,18 +71,10 @@ export class GitHubSignatureStore implements SignatureStorage {
   }
 }
 
-/**
- * Default storage strategy: use GitHub API
- */
 export function createDefaultSignatureStore(octokit: any, owner: string, repo: string): SignatureStorage {
   return new GitHubSignatureStore(octokit, owner, repo)
 }
 
-/**
- * Atomic signature persistence
- * MUST be called before returning success
- * Throws if persistence fails (fail-closed)
- */
 export async function atomicPersistSignature(
   storage: SignatureStorage,
   userId: number,
@@ -121,16 +92,12 @@ export async function atomicPersistSignature(
   }
 }
 
-/**
- * Batch persist multiple signatures atomically
- * All-or-nothing: if any fails, none are saved
- */
 export async function atomicBatchPersist(
   storage: SignatureStorage,
   signatures: Array<{ userId: number; commitSha: string }>
 ): Promise<void> {
   if (signatures.length === 0) {
-    return // Nothing to persist
+    return
   }
 
   try {

@@ -1,17 +1,7 @@
-/**
- * T5: Comment Enumeration with Full Pagination
- * 
- * Fetches all PR comments with full pagination.
- * GitHub REST API: max 30 comments per page.
- */
-
 import * as core from '@actions/core'
 import { AuthorIdentity } from '../interfaces'
 import { toAuthorIdentity } from '../typed-author/authorIdentity'
 
-/**
- * Signature comment type
- */
 export interface SignatureComment {
   id: number
   body: string
@@ -21,23 +11,13 @@ export interface SignatureComment {
   pr_number: number
 }
 
-/**
- * Options for fetching comments
- */
 export interface CommentFetchOptions {
   owner: string
   repo: string
-  issue_number: number // PR number
+  issue_number: number
   octokit: any
 }
 
-/**
- * Fetch all comments from a PR with full pagination
- * 
- * - Uses REST API: /repos/{owner}/{repo}/issues/{issue_number}/comments
- * - Max 30 per page
- * - Returns all comments as typed objects
- */
 export async function getAllComments(opts: CommentFetchOptions): Promise<SignatureComment[]> {
   const { owner, repo, issue_number, octokit } = opts
   const allComments: SignatureComment[] = []
@@ -67,7 +47,6 @@ export async function getAllComments(opts: CommentFetchOptions): Promise<Signatu
 
       core.debug(`Page ${page} returned ${comments.length} comments`)
 
-      // Convert each comment to typed SignatureComment
       for (const comment of comments) {
         try {
           const signatureComment = toSignatureComment(comment, issue_number)
@@ -77,7 +56,6 @@ export async function getAllComments(opts: CommentFetchOptions): Promise<Signatu
         }
       }
 
-      // If we got fewer than per_page, we've reached the end
       if (comments.length < per_page) {
         core.debug(`Page ${page} returned fewer than ${per_page} comments, stopping`)
         break
@@ -85,7 +63,6 @@ export async function getAllComments(opts: CommentFetchOptions): Promise<Signatu
 
       page++
 
-      // Safety: stop if we've fetched more than 3000 comments (100 pages)
       if (page > 100) {
         core.error('Comment pagination exceeded 3000 comments, stopping to prevent runaway loop')
         break
@@ -99,9 +76,6 @@ export async function getAllComments(opts: CommentFetchOptions): Promise<Signatu
   }
 }
 
-/**
- * Convert REST API comment to SignatureComment
- */
 function toSignatureComment(apiComment: any, pr_number: number): SignatureComment {
   if (!apiComment || !apiComment.id || !apiComment.body) {
     throw new Error('Invalid comment: missing id or body')
@@ -119,10 +93,6 @@ function toSignatureComment(apiComment: any, pr_number: number): SignatureCommen
   }
 }
 
-/**
- * Regex pattern to detect CLA signature comments
- * Matches: "I agree to ...", "I have read and agree to ...", etc.
- */
 const CLA_SIGNATURE_PATTERNS = [
   /I\s+(?:have\s+)?(?:read\s+and\s+)?agree\s+to\s+the\s+CLA/i,
   /I\s+sign\s+the\s+CLA/i,
@@ -131,9 +101,6 @@ const CLA_SIGNATURE_PATTERNS = [
   /contributor\s+license\s+agreement/i
 ]
 
-/**
- * Check if a comment is a CLA signature comment
- */
 export function isSignatureComment(comment: SignatureComment): boolean {
   for (const pattern of CLA_SIGNATURE_PATTERNS) {
     if (pattern.test(comment.body)) {
@@ -143,16 +110,10 @@ export function isSignatureComment(comment: SignatureComment): boolean {
   return false
 }
 
-/**
- * Filter comments to only signature comments
- */
 export function filterSignatureComments(comments: SignatureComment[]): SignatureComment[] {
   return comments.filter(isSignatureComment)
 }
 
-/**
- * Get all signature comments from a PR
- */
 export async function getAllSignatureComments(
   opts: CommentFetchOptions
 ): Promise<SignatureComment[]> {
@@ -160,9 +121,6 @@ export async function getAllSignatureComments(
   return filterSignatureComments(allComments)
 }
 
-/**
- * Extract unique authors who have signed via comments
- */
 export function extractSigningAuthors(signatureComments: SignatureComment[]): AuthorIdentity[] {
   const seen = new Set<number>()
   const authors: AuthorIdentity[] = []
@@ -170,7 +128,6 @@ export function extractSigningAuthors(signatureComments: SignatureComment[]): Au
   for (const comment of signatureComments) {
     const { githubId, verified } = comment.author
 
-    // Only verified signers with valid GitHub IDs
     if (verified && githubId > 0 && !seen.has(githubId)) {
       seen.add(githubId)
       authors.push(comment.author)
