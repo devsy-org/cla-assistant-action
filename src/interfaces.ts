@@ -1,3 +1,16 @@
+// ===== Identity & Author Model (T1) =====
+export interface AuthorIdentity {
+    name: string
+    githubId: number
+    verified: boolean
+}
+
+export interface CommitAuthor {
+    authorIdentity: AuthorIdentity
+    commitSha: string
+}
+
+// ===== Legacy Interfaces (deprecated, kept for backward compat) =====
 export interface CommitterMap {
     signed: CommittersDetails[],
     notSigned: CommittersDetails[],
