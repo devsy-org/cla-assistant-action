@@ -65,50 +65,59 @@ async function getCommitters() {
     try {
         let committers = [];
         let filteredCommitters = [];
-        let response = await octokit_1.octokit.graphql(`
-        query($owner:String! $name:String! $number:Int! $cursor:String!){
-            repository(owner: $owner, name: $name) {
-            pullRequest(number: $number) {
-                commits(first: 100, after: $cursor) {
-                    totalCount
-                    edges {
-                        node {
-                            commit {
-                                author {
-                                    email
-                                    name
-                                    user {
-                                        id
-                                        databaseId
-                                        login
+        let cursor = '';
+        let hasNextPage = false;
+        const edges = [];
+        do {
+            const response = await octokit_1.octokit.graphql(`
+            query($owner:String! $name:String! $number:Int! $cursor:String!){
+                repository(owner: $owner, name: $name) {
+                pullRequest(number: $number) {
+                    commits(first: 100, after: $cursor) {
+                        totalCount
+                        edges {
+                            node {
+                                commit {
+                                    author {
+                                        email
+                                        name
+                                        user {
+                                            id
+                                            databaseId
+                                            login
+                                        }
                                     }
-                                }
-                                committer {
-                                    name
-                                    user {
-                                        id
-                                        databaseId
-                                        login
+                                    committer {
+                                        name
+                                        user {
+                                            id
+                                            databaseId
+                                            login
+                                        }
                                     }
                                 }
                             }
+                            cursor
                         }
-                        cursor
-                    }
-                    pageInfo {
-                        endCursor
-                        hasNextPage
+                        pageInfo {
+                            endCursor
+                            hasNextPage
+                        }
                     }
                 }
             }
-        }
-    }`.replace(/ /g, ''), {
-            owner: github_1.context.repo.owner,
-            name: github_1.context.repo.repo,
-            number: github_1.context.issue.number,
-            cursor: ''
-        });
-        response.repository.pullRequest.commits.edges.forEach(edge => {
+        }`.replace(/ /g, ''), {
+                owner: github_1.context.repo.owner,
+                name: github_1.context.repo.repo,
+                number: github_1.context.issue.number,
+                cursor
+            });
+            const commits = response.repository.pullRequest.commits;
+            edges.push(...commits.edges);
+            cursor = commits.pageInfo.endCursor;
+            hasNextPage = commits.pageInfo.hasNextPage;
+        } while (hasNextPage);
+        edges.forEach(edge => {
             const committer = extractUserFromCommit(edge.node.commit);
             let user = {
                 name: committer.login || committer.name,
