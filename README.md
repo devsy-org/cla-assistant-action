@@ -400,3 +400,5 @@ See the License for the specific language governing permissions and
 limitations under the License.
 
 Pull request committers are collected across every GraphQL page, including pull requests with more than 100 commits. Duplicate committers and the existing bot exclusion are applied across the complete commit list.
+
+The CLA check fails if the number of collected commits differs from the total reported by GitHub, even when GitHub reports that no further pages exist. This prevents an incomplete commit list from granting CLA approval.

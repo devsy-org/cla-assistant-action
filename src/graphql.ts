@@ -11,6 +11,7 @@ export default async function getCommitters(): Promise<CommittersDetails[]> {
         let cursor = ''
         let hasNextPage = false
         const edges: any[] = []
+        let totalCount = 0
         do {
             const response: any = await octokit.graphql(`
             query($owner:String! $name:String! $number:Int! $cursor:String!){
@@ -57,9 +58,13 @@ export default async function getCommitters(): Promise<CommittersDetails[]> {
             })
             const commits = response.repository.pullRequest.commits
             edges.push(...commits.edges)
+            totalCount = commits.totalCount
             cursor = commits.pageInfo.endCursor
             hasNextPage = commits.pageInfo.hasNextPage
         } while (hasNextPage)
+        if (edges.length !== totalCount) {
+            throw new Error(`Incomplete pull request commit list: expected ${totalCount}, received ${edges.length}`)
+        }
         edges.forEach(edge => {
             const committer = extractUserFromCommit(edge.node.commit)
             let user = {
