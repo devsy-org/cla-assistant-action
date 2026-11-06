@@ -18,13 +18,13 @@ jobs:
         node-version: [18.x, 20.x]
     steps:
     - name: Initialize Energy Estimation
-      uses: green-coding-berlin/eco-ci-energy-estimation@v1
+      uses: green-coding-solutions/eco-ci-energy-estimation@v5.3.0
       with:
         task: start-measurement
     - name: "Checkout repository"
       uses: actions/checkout@v4
     - name: Checkout Repo Measurement
-      uses: green-coding-berlin/eco-ci-energy-estimation@v1
+      uses: green-coding-solutions/eco-ci-energy-estimation@v5.3.0
       with:
         task: get-measurement
         label: 'repository checkout'
@@ -39,11 +39,11 @@ jobs:
     - name: Npm build
       run: npm run build --if-present
     - name: Checkout Repo Measurement
-      uses: green-coding-berlin/eco-ci-energy-estimation@v1
+      uses: green-coding-solutions/eco-ci-energy-estimation@v5.3.0
       with:
         task: get-measurement
         label: 'Npm activities'
     - name: Show Energy Results
-      uses: green-coding-berlin/eco-ci-energy-estimation@v1
+      uses: green-coding-solutions/eco-ci-energy-estimation@v5.3.0
       with:
         task: display-results
