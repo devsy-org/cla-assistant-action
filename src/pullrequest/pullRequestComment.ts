@@ -57,14 +57,14 @@ async function updateComment(signed: boolean, committerMap: CommitterMap, claBot
 
 async function getComment() {
   try {
-    const response = await octokit.issues.listComments({ owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number })
+    const comments = await octokit.paginate(octokit.issues.listComments, { owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, per_page: 100 })
 
     //TODO: check the below regex
     // using a `string` true or false purposely as github action input cannot have a boolean value
     if (getUseDcoFlag() === 'true') {
-      return response.data.find(comment => comment.body.match(/.*DCO Assistant Lite bot.*/m))
+      return comments.find(comment => comment.body.match(/.*DCO Assistant Lite bot.*/m))
     } else if (getUseDcoFlag() === 'false') {
-      return response.data.find(comment => comment.body.match(/.*CLA Assistant Lite bot.*/m))
+      return comments.find(comment => comment.body.match(/.*CLA Assistant Lite bot.*/m))
     }
   } catch (error) {
     throw new Error(`Error occured when getting  all the comments of the pull request: ${error.message}`)

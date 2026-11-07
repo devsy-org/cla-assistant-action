@@ -528,14 +528,14 @@ async function updateComment(signed, committerMap, claBotComment) {
 }
 async function getComment() {
     try {
-        const response = await octokit_1.octokit.issues.listComments({ owner: github_1.context.repo.owner, repo: github_1.context.repo.repo, issue_number: github_1.context.issue.number });
+        const comments = await octokit_1.octokit.paginate(octokit_1.octokit.issues.listComments, { owner: github_1.context.repo.owner, repo: github_1.context.repo.repo, issue_number: github_1.context.issue.number, per_page: 100 });
         //TODO: check the below regex
         // using a `string` true or false purposely as github action input cannot have a boolean value
         if ((0, getInputs_1.getUseDcoFlag)() === 'true') {
-            return response.data.find(comment => comment.body.match(/.*DCO Assistant Lite bot.*/m));
+            return comments.find(comment => comment.body.match(/.*DCO Assistant Lite bot.*/m));
         }
         else if ((0, getInputs_1.getUseDcoFlag)() === 'false') {
-            return response.data.find(comment => comment.body.match(/.*CLA Assistant Lite bot.*/m));
+            return comments.find(comment => comment.body.match(/.*CLA Assistant Lite bot.*/m));
         }
     }
     catch (error) {
@@ -750,14 +750,15 @@ const getInputs_1 = __nccwpck_require__(3611);
 const isPrSignComment_1 = __nccwpck_require__(8928);
 async function signatureWithPRComment(committerMap, committers) {
     let repoId = github_1.context.payload.repository.id;
-    let prResponse = await octokit_1.octokit.issues.listComments({
+    const prComments = await octokit_1.octokit.paginate(octokit_1.octokit.issues.listComments, {
         owner: github_1.context.repo.owner,
         repo: github_1.context.repo.repo,
-        issue_number: github_1.context.issue.number
+        issue_number: github_1.context.issue.number,
+        per_page: 100
     });
     let listOfPRComments = [];
     let filteredListOfPRComments = [];
-    prResponse?.data.map((prComment) => {
+    prComments.map((prComment) => {
         listOfPRComments.push({
             name: prComment.user.login,
             id: prComment.user.id,
