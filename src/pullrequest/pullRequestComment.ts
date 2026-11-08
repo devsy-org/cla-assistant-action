@@ -1,6 +1,6 @@
 import { octokit } from '../octokit'
 import { context } from '@actions/github'
-import signatureWithPRComment from './signatureComment'
+import signatureWithPRComment, { listPullRequestComments } from './signatureComment'
 import { commentContent } from './pullRequestCommentContent'
 import {
   CommitterMap,
@@ -14,7 +14,8 @@ export default async function prCommentSetup(committerMap: CommitterMap, committ
   const signed = committerMap?.notSigned && committerMap?.notSigned.length === 0
 
   try {
-    const claBotComment = await getComment()
+    const comments = await getComments()
+    const claBotComment = findBotComment(comments, await getAuthenticatedUserId())
     if (!claBotComment && !signed) {
       return createComment(signed, committerMap)
     } else if (claBotComment?.id) {
@@ -23,7 +24,7 @@ export default async function prCommentSetup(committerMap: CommitterMap, committ
       }
 
       // reacted committers are contributors who have newly signed by posting the Pull Request comment
-      const reactedCommitters = await signatureWithPRComment(committerMap, committers)
+      const reactedCommitters = await signatureWithPRComment(committerMap, committers, comments)
       if (reactedCommitters?.onlyCommitters) {
           reactedCommitters.allSignedFlag = prepareAllSignedCommitters(committerMap, reactedCommitters.onlyCommitters, committers)
       }
@@ -55,20 +56,48 @@ async function updateComment(signed: boolean, committerMap: CommitterMap, claBot
   }).catch(error => { throw new Error(`Error occured when updating the pull request comment: ${error.message}`) })
 }
 
-async function getComment() {
+async function getComments() {
   try {
-    const comments = await octokit.paginate(octokit.issues.listComments, { owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, per_page: 100 })
-
-    //TODO: check the below regex
-    // using a `string` true or false purposely as github action input cannot have a boolean value
-    if (getUseDcoFlag() === 'true') {
-      return comments.find(comment => comment.body.match(/.*DCO Assistant Lite bot.*/m))
-    } else if (getUseDcoFlag() === 'false') {
-      return comments.find(comment => comment.body.match(/.*CLA Assistant Lite bot.*/m))
-    }
+    return await listPullRequestComments()
   } catch (error) {
     throw new Error(`Error occured when getting  all the comments of the pull request: ${error.message}`)
   }
+}
+
+async function getAuthenticatedUserId(): Promise<number | undefined> {
+  try {
+    const { data } = await octokit.users.getAuthenticated()
+    return data?.id
+  } catch {
+    return undefined
+  }
+}
+
+function findBotComment(comments: any[], authenticatedUserId?: number) {
+  // using a `string` true or false purposely as github action input cannot have a boolean value
+  const useDco = getUseDcoFlag()
+  if (useDco !== 'true' && useDco !== 'false') {
+    return undefined
+  }
+  const marker = useDco === 'true' ? /.*DCO Assistant Lite bot.*/m : /.*CLA Assistant Lite bot.*/m
+  const candidates = comments.filter(comment => isOwnAuthor(comment?.user, authenticatedUserId) && marker.test(comment.body || ''))
+  return candidates.reduce((newest, comment) => (isNewer(comment, newest) ? comment : newest), undefined)
+}
+
+function isOwnAuthor(user: any, authenticatedUserId?: number): boolean {
+  if (!user) {
+    return false
+  }
+  return user.type === 'Bot' || (authenticatedUserId !== undefined && user.id === authenticatedUserId)
+}
+
+function isNewer(comment: any, other: any): boolean {
+  if (!other) {
+    return true
+  }
+  const a = Date.parse(comment.created_at) || 0
+  const b = Date.parse(other.created_at) || 0
+  return a !== b ? a > b : comment.id > other.id
 }
 
 function prepareCommiterMap(committerMap: CommitterMap, reactedCommitters) {

@@ -6,24 +6,31 @@ import { isPrSignComment } from '../shared/isPrSignComment'
 
 import * as core from '@actions/core'
 
-export default async function signatureWithPRComment(committerMap: CommitterMap, committers): Promise<ReactedCommitterMap> {
-
-    let repoId = context.payload.repository!.id
-    const prComments = await octokit.paginate(octokit.issues.listComments, {
+export async function listPullRequestComments(): Promise<any[]> {
+    return octokit.paginate(octokit.issues.listComments, {
         owner: context.repo.owner,
         repo: context.repo.repo,
         issue_number: context.issue.number,
         per_page: 100
     })
+}
+
+export default async function signatureWithPRComment(committerMap: CommitterMap, committers, comments?: any[]): Promise<ReactedCommitterMap> {
+
+    let repoId = context.payload.repository!.id
+    const prComments = comments ?? await listPullRequestComments()
     let listOfPRComments = [] as CommittersDetails[]
     let filteredListOfPRComments = [] as CommittersDetails[]
 
-    prComments.map((prComment) => {
+    prComments.forEach((prComment) => {
+        if (!prComment?.user) {
+            return
+        }
         listOfPRComments.push({
             name: prComment.user.login,
             id: prComment.user.id,
             comment_id: prComment.id,
-            body: prComment.body.trim().toLowerCase(),
+            body: (prComment.body || '').trim().toLowerCase(),
             created_at: prComment.created_at,
             repoId: repoId,
             pullRequestNo: context.issue.number

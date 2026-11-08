@@ -80,7 +80,7 @@ describe('comment list pagination', () => {
     all[TOTAL - 1] = {
       id: TOTAL,
       body: '**CLA Assistant Lite bot** please sign',
-      user: { id: 1, login: 'github-actions[bot]' },
+      user: { id: 1, login: 'github-actions[bot]', type: 'Bot' },
       created_at: '2026-01-02T00:00:00Z'
     }
     installApi(all)
@@ -92,5 +92,84 @@ describe('comment list pagination', () => {
     expect(mockOctokit.issues.updateComment).toHaveBeenCalledWith(
       expect.objectContaining({ comment_id: TOTAL })
     )
+  })
+})
+
+describe('comment robustness', () => {
+  const BOT = { id: 1, login: 'github-actions[bot]', type: 'Bot' }
+  const HUMAN = { id: 77, login: 'human', type: 'User' }
+  const marker = '**CLA Assistant Lite bot** please sign'
+
+  function comment(id: number, body: string, user: any, created = `2026-01-0${id}T00:00:00Z`) {
+    return { id, body, user, created_at: created }
+  }
+
+  it('skips comments without a user and never treats them as a signer', async () => {
+    installApi([
+      comment(1, 'I have read the CLA Document and I hereby sign the CLA', null),
+      comment(2, 'I have read the CLA Document and I hereby sign the CLA', HUMAN)
+    ])
+    const committerMap: any = { signed: [], notSigned: [{ id: HUMAN.id, name: HUMAN.login }] }
+
+    const result = await signatureWithPRComment(committerMap, [{ id: HUMAN.id, name: HUMAN.login }])
+
+    expect(result.newSigned.map(c => c.id)).toEqual([HUMAN.id])
+  })
+
+  it('does not crash the bot comment lookup on a comment without a user', async () => {
+    installApi([comment(1, 'ghost', null), comment(2, marker, BOT)])
+
+    await prCommentSetup({ signed: [], notSigned: [{ id: 5, name: 'o' }] } as any, [{ id: 5, name: 'o' }] as any)
+
+    expect(mockOctokit.issues.updateComment).toHaveBeenCalledWith(expect.objectContaining({ comment_id: 2 }))
+  })
+
+  it('does not adopt a user comment that contains the marker text', async () => {
+    installApi([comment(1, marker, HUMAN)])
+
+    await prCommentSetup({ signed: [], notSigned: [{ id: 5, name: 'o' }] } as any, [{ id: 5, name: 'o' }] as any)
+
+    expect(mockOctokit.issues.updateComment).not.toHaveBeenCalled()
+    expect(mockOctokit.issues.createComment).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not adopt a marker comment from a User account whose login ends in [bot]', async () => {
+    installApi([comment(1, marker, { id: 9, login: 'impostor[bot]', type: 'User' })])
+
+    await prCommentSetup({ signed: [], notSigned: [{ id: 5, name: 'o' }] } as any, [{ id: 5, name: 'o' }] as any)
+
+    expect(mockOctokit.issues.updateComment).not.toHaveBeenCalled()
+  })
+
+  it('updates the newest bot comment when duplicates exist', async () => {
+    installApi([
+      comment(3, marker, BOT, '2026-01-03T00:00:00Z'),
+      comment(5, marker, BOT, '2026-01-05T00:00:00Z'),
+      comment(4, marker, BOT, '2026-01-04T00:00:00Z')
+    ])
+
+    await prCommentSetup({ signed: [], notSigned: [{ id: 5, name: 'o' }] } as any, [{ id: 5, name: 'o' }] as any)
+
+    expect(mockOctokit.issues.createComment).not.toHaveBeenCalled()
+    expect(mockOctokit.issues.updateComment).toHaveBeenCalledWith(expect.objectContaining({ comment_id: 5 }))
+  })
+
+  it('adopts the marker comment of the authenticated user when the token belongs to a user', async () => {
+    installApi([comment(1, marker, HUMAN), comment(2, marker, { id: 88, login: 'other', type: 'User' })])
+    mockOctokit.users = { getAuthenticated: jest.fn().mockResolvedValue({ data: { id: HUMAN.id } }) }
+
+    await prCommentSetup({ signed: [], notSigned: [{ id: 5, name: 'o' }] } as any, [{ id: 5, name: 'o' }] as any)
+    delete mockOctokit.users
+
+    expect(mockOctokit.issues.createComment).not.toHaveBeenCalled()
+    expect(mockOctokit.issues.updateComment).toHaveBeenCalledWith(expect.objectContaining({ comment_id: 1 }))
+  })
+
+  it('fetches the comment list once per run', async () => {
+    installApi([comment(1, marker, BOT)])
+
+    await prCommentSetup({ signed: [], notSigned: [{ id: 5, name: 'o' }] } as any, [{ id: 5, name: 'o' }] as any)
+
+    expect(mockOctokit.paginate).toHaveBeenCalledTimes(1)
   })
 })
