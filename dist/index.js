@@ -508,7 +508,7 @@ async function prCommentSetup(committerMap, committers) {
     const signed = committerMap?.notSigned && committerMap?.notSigned.length === 0;
     try {
         const comments = await getComments();
-        const claBotComment = findBotComment(comments);
+        const claBotComment = findBotComment(comments, await getAuthenticatedUserId());
         if (!claBotComment && !signed) {
             return createComment(signed, committerMap);
         }
@@ -555,15 +555,30 @@ async function getComments() {
         throw new Error(`Error occured when getting  all the comments of the pull request: ${error.message}`);
     }
 }
-function findBotComment(comments) {
+async function getAuthenticatedUserId() {
+    try {
+        const { data } = await octokit_1.octokit.users.getAuthenticated();
+        return data?.id;
+    }
+    catch {
+        return undefined;
+    }
+}
+function findBotComment(comments, authenticatedUserId) {
     // using a `string` true or false purposely as github action input cannot have a boolean value
     const useDco = (0, getInputs_1.getUseDcoFlag)();
     if (useDco !== 'true' && useDco !== 'false') {
         return undefined;
     }
     const marker = useDco === 'true' ? /.*DCO Assistant Lite bot.*/m : /.*CLA Assistant Lite bot.*/m;
-    const candidates = comments.filter(comment => comment?.user?.type === 'Bot' && marker.test(comment.body || ''));
+    const candidates = comments.filter(comment => isOwnAuthor(comment?.user, authenticatedUserId) && marker.test(comment.body || ''));
     return candidates.reduce((newest, comment) => (isNewer(comment, newest) ? comment : newest), undefined);
+}
+function isOwnAuthor(user, authenticatedUserId) {
+    if (!user) {
+        return false;
+    }
+    return user.type === 'Bot' || (authenticatedUserId !== undefined && user.id === authenticatedUserId);
 }
 function isNewer(comment, other) {
     if (!other) {

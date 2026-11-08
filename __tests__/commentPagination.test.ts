@@ -154,6 +154,17 @@ describe('comment robustness', () => {
     expect(mockOctokit.issues.updateComment).toHaveBeenCalledWith(expect.objectContaining({ comment_id: 5 }))
   })
 
+  it('adopts the marker comment of the authenticated user when the token belongs to a user', async () => {
+    installApi([comment(1, marker, HUMAN), comment(2, marker, { id: 88, login: 'other', type: 'User' })])
+    mockOctokit.users = { getAuthenticated: jest.fn().mockResolvedValue({ data: { id: HUMAN.id } }) }
+
+    await prCommentSetup({ signed: [], notSigned: [{ id: 5, name: 'o' }] } as any, [{ id: 5, name: 'o' }] as any)
+    delete mockOctokit.users
+
+    expect(mockOctokit.issues.createComment).not.toHaveBeenCalled()
+    expect(mockOctokit.issues.updateComment).toHaveBeenCalledWith(expect.objectContaining({ comment_id: 1 }))
+  })
+
   it('fetches the comment list once per run', async () => {
     installApi([comment(1, marker, BOT)])
 

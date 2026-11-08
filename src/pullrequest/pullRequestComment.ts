@@ -15,7 +15,7 @@ export default async function prCommentSetup(committerMap: CommitterMap, committ
 
   try {
     const comments = await getComments()
-    const claBotComment = findBotComment(comments)
+    const claBotComment = findBotComment(comments, await getAuthenticatedUserId())
     if (!claBotComment && !signed) {
       return createComment(signed, committerMap)
     } else if (claBotComment?.id) {
@@ -64,15 +64,31 @@ async function getComments() {
   }
 }
 
-function findBotComment(comments: any[]) {
+async function getAuthenticatedUserId(): Promise<number | undefined> {
+  try {
+    const { data } = await octokit.users.getAuthenticated()
+    return data?.id
+  } catch {
+    return undefined
+  }
+}
+
+function findBotComment(comments: any[], authenticatedUserId?: number) {
   // using a `string` true or false purposely as github action input cannot have a boolean value
   const useDco = getUseDcoFlag()
   if (useDco !== 'true' && useDco !== 'false') {
     return undefined
   }
   const marker = useDco === 'true' ? /.*DCO Assistant Lite bot.*/m : /.*CLA Assistant Lite bot.*/m
-  const candidates = comments.filter(comment => comment?.user?.type === 'Bot' && marker.test(comment.body || ''))
+  const candidates = comments.filter(comment => isOwnAuthor(comment?.user, authenticatedUserId) && marker.test(comment.body || ''))
   return candidates.reduce((newest, comment) => (isNewer(comment, newest) ? comment : newest), undefined)
+}
+
+function isOwnAuthor(user: any, authenticatedUserId?: number): boolean {
+  if (!user) {
+    return false
+  }
+  return user.type === 'Bot' || (authenticatedUserId !== undefined && user.id === authenticatedUserId)
 }
 
 function isNewer(comment: any, other: any): boolean {
