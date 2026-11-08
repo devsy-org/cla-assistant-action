@@ -475,19 +475,40 @@ async function checkIfLastWorkFlowFailed(run) {
 
 "use strict";
 
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 const octokit_1 = __nccwpck_require__(3258);
 const github_1 = __nccwpck_require__(5438);
-const signatureComment_1 = __importDefault(__nccwpck_require__(1905));
+const signatureComment_1 = __importStar(__nccwpck_require__(1905));
 const pullRequestCommentContent_1 = __nccwpck_require__(3621);
 const getInputs_1 = __nccwpck_require__(3611);
 async function prCommentSetup(committerMap, committers) {
     const signed = committerMap?.notSigned && committerMap?.notSigned.length === 0;
     try {
-        const claBotComment = await getComment();
+        const comments = await getComments();
+        const claBotComment = findBotComment(comments);
         if (!claBotComment && !signed) {
             return createComment(signed, committerMap);
         }
@@ -496,7 +517,7 @@ async function prCommentSetup(committerMap, committers) {
                 await updateComment(signed, committerMap, claBotComment);
             }
             // reacted committers are contributors who have newly signed by posting the Pull Request comment
-            const reactedCommitters = await (0, signatureComment_1.default)(committerMap, committers);
+            const reactedCommitters = await (0, signatureComment_1.default)(committerMap, committers, comments);
             if (reactedCommitters?.onlyCommitters) {
                 reactedCommitters.allSignedFlag = prepareAllSignedCommitters(committerMap, reactedCommitters.onlyCommitters, committers);
             }
@@ -526,21 +547,31 @@ async function updateComment(signed, committerMap, claBotComment) {
         body: (0, pullRequestCommentContent_1.commentContent)(signed, committerMap)
     }).catch(error => { throw new Error(`Error occured when updating the pull request comment: ${error.message}`); });
 }
-async function getComment() {
+async function getComments() {
     try {
-        const comments = await octokit_1.octokit.paginate(octokit_1.octokit.issues.listComments, { owner: github_1.context.repo.owner, repo: github_1.context.repo.repo, issue_number: github_1.context.issue.number, per_page: 100 });
-        //TODO: check the below regex
-        // using a `string` true or false purposely as github action input cannot have a boolean value
-        if ((0, getInputs_1.getUseDcoFlag)() === 'true') {
-            return comments.find(comment => comment.body.match(/.*DCO Assistant Lite bot.*/m));
-        }
-        else if ((0, getInputs_1.getUseDcoFlag)() === 'false') {
-            return comments.find(comment => comment.body.match(/.*CLA Assistant Lite bot.*/m));
-        }
+        return await (0, signatureComment_1.listPullRequestComments)();
     }
     catch (error) {
         throw new Error(`Error occured when getting  all the comments of the pull request: ${error.message}`);
     }
+}
+function findBotComment(comments) {
+    // using a `string` true or false purposely as github action input cannot have a boolean value
+    const useDco = (0, getInputs_1.getUseDcoFlag)();
+    if (useDco !== 'true' && useDco !== 'false') {
+        return undefined;
+    }
+    const marker = useDco === 'true' ? /.*DCO Assistant Lite bot.*/m : /.*CLA Assistant Lite bot.*/m;
+    const candidates = comments.filter(comment => comment?.user?.type === 'Bot' && marker.test(comment.body || ''));
+    return candidates.reduce((newest, comment) => (isNewer(comment, newest) ? comment : newest), undefined);
+}
+function isNewer(comment, other) {
+    if (!other) {
+        return true;
+    }
+    const a = Date.parse(comment.created_at) || 0;
+    const b = Date.parse(other.created_at) || 0;
+    return a !== b ? a > b : comment.id > other.id;
 }
 function prepareCommiterMap(committerMap, reactedCommitters) {
     committerMap.signed?.push(...reactedCommitters.newSigned);
@@ -743,27 +774,34 @@ exports.lockPullRequest = lockPullRequest;
 "use strict";
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.isCommentSignedByUser = void 0;
+exports.isCommentSignedByUser = exports.listPullRequestComments = void 0;
 const octokit_1 = __nccwpck_require__(3258);
 const github_1 = __nccwpck_require__(5438);
 const getInputs_1 = __nccwpck_require__(3611);
 const isPrSignComment_1 = __nccwpck_require__(8928);
-async function signatureWithPRComment(committerMap, committers) {
-    let repoId = github_1.context.payload.repository.id;
-    const prComments = await octokit_1.octokit.paginate(octokit_1.octokit.issues.listComments, {
+async function listPullRequestComments() {
+    return octokit_1.octokit.paginate(octokit_1.octokit.issues.listComments, {
         owner: github_1.context.repo.owner,
         repo: github_1.context.repo.repo,
         issue_number: github_1.context.issue.number,
         per_page: 100
     });
+}
+exports.listPullRequestComments = listPullRequestComments;
+async function signatureWithPRComment(committerMap, committers, comments) {
+    let repoId = github_1.context.payload.repository.id;
+    const prComments = comments ?? await listPullRequestComments();
     let listOfPRComments = [];
     let filteredListOfPRComments = [];
-    prComments.map((prComment) => {
+    prComments.forEach((prComment) => {
+        if (!prComment?.user) {
+            return;
+        }
         listOfPRComments.push({
             name: prComment.user.login,
             id: prComment.user.id,
             comment_id: prComment.id,
-            body: prComment.body.trim().toLowerCase(),
+            body: (prComment.body || '').trim().toLowerCase(),
             created_at: prComment.created_at,
             repoId: repoId,
             pullRequestNo: github_1.context.issue.number
